@@ -1,9 +1,11 @@
 import random
 import time
-import ttkbootstrap as ttk
-from tkinter import messagebox
+import ttkbootstrap as ttk  # https://ttkbootstrap.readthedocs.io/en/latest/
+from tkinter import messagebox  # https://docs.python.org/3/library/tkinter.messagebox.html
 
-# Spēles koka mezgls
+# === Spēles koka mezgls ===
+# Izmantojam, lai reprezentētu katru iespējamo spēles stāvokli
+# https://en.wikipedia.org/wiki/Game_tree
 class GameTreeNode:
     def __init__(self, number, player_points=0, ai_points=0):
         self.number = number
@@ -18,16 +20,18 @@ class GameTreeNode:
                 child = GameTreeNode(new_number, self.player_points, self.ai_points)
                 self.children.append(child)
 
-# Skaitļu ģenerēšana (kas dalās ar 2, 3, 4)
+# === Funkcija, kas ģenerē sākotnējos skaitļus, kuri dalās ar 2, 3 un 4 ===
+# Šādi mēs nodrošinām, ka visām darbībām ir jēga spēles sākumā
 def generate_valid_numbers():
     numbers = []
     while len(numbers) < 5:
-        num = random.randint(20000, 30000)
+        num = random.randint(20000, 30000)  # https://docs.python.org/3/library/random.html
         if num % 2 == 0 and num % 3 == 0 and num % 4 == 0:
             numbers.append(num)
     return numbers
 
-# Spēles klase
+# === Spēles loģikas klase ===
+# Šeit tiek ieviesti visi noteikumi, kustības un AI algoritmi
 class Game:
     def __init__(self, number):
         self.now_number = number
@@ -36,6 +40,7 @@ class Game:
         self.visited_nodes = 0
         self.start_time = time.time()
 
+    # Lietotāja vai AI gājiens
     def move(self, divisor, is_human):
         if self.now_number % divisor == 0:
             new_number = self.now_number // divisor
@@ -53,9 +58,13 @@ class Game:
             return True
         return False
 
+    # Heiristikas funkcija, kas nosaka stāvokļa vērtību
+    # https://www.geeksforgeeks.org/minimax-algorithm-in-game-theory-set-1-introduction/
     def heuristic(self):
         return self.player_points - self.ai_points
 
+    # Minimax algoritms (bez griešanas)
+    # https://www.geeksforgeeks.org/minimax-algorithm-in-game-theory-set-2-implementation/
     def minimax(self, depth, is_maximizing):
         self.visited_nodes += 1
         if self.now_number <= 10 or depth == 0:
@@ -72,6 +81,8 @@ class Game:
                 best_value = max(best_value, eval) if is_maximizing else min(best_value, eval)
         return best_value
 
+    # Alfa-beta griešana — optimizēts minimax
+    # https://www.geeksforgeeks.org/practical-implementation-of-alpha-beta-pruning/
     def alpha_beta(self, depth, alpha, beta, is_maximizing):
         self.visited_nodes += 1
         if self.now_number <= 10 or depth == 0:
@@ -89,7 +100,7 @@ class Game:
                     max_eval = max(max_eval, eval)
                     alpha = max(alpha, eval)
                     if beta <= alpha:
-                        break
+                        break  # Griešana
             return max_eval
         else:
             min_eval = float('inf')
@@ -106,20 +117,20 @@ class Game:
                         break
             return min_eval
 
+# === Lietotāja saskarne ar ttkbootstrap (Tkinter uzlabotā versija) ===
 class GameGUI:
     def __init__(self, root):
         self.root = root
         self.algorithm = "Minimax"
         self.start_numbers = generate_valid_numbers()
 
-        # Izveidojiet `status_label` pirms sākuma
+        # Paziņojums par algoritma izvēli
         self.status_label = ttk.Label(root, text="Izvēlieties sākotnējo skaitli un algoritmu")
         self.status_label.pack(padx=10, pady=10)
 
         self.create_selection_screen()
 
     def create_selection_screen(self):
-        # Izveidot izvēles ekrānu
         self.selection_frame = ttk.Frame(self.root)
         self.selection_frame.pack(padx=10, pady=10)
 
@@ -163,15 +174,12 @@ class GameGUI:
             self.ai_move()
 
     def create_game_screen(self):
-        # Jaunas spēles ekrāna izveide
         self.game_frame = ttk.Frame(self.root)
         self.game_frame.pack(padx=10, pady=10)
 
-        # Statusa etiķete (novietojam to pirms spēles loga)
         self.status_label = ttk.Label(self.game_frame, text="Spēles sākums")
         self.status_label.grid(row=0, column=0, columnspan=3)
 
-        # Izveidot pogas, lai spēlētājs varētu izvēlēties dalīt ar 2, 3 vai 4
         self.move_buttons = []
         for i, move in enumerate([2, 3, 4]):
             button = ttk.Button(self.game_frame, text=f"Dalīt ar {move}", command=lambda move=move: self.player_move(move))
@@ -200,12 +208,11 @@ class GameGUI:
                 new_state.ai_points = self.game.ai_points
                 new_state.move(move, False)
 
-                # Correct function call based on selected algorithm
                 if self.algorithm == "Minimax":
                     eval = new_state.minimax(3, False)
                 else:
                     eval = new_state.alpha_beta(3, float('-inf'), float('inf'), False)
-                
+
                 if eval > best_value:
                     best_value = eval
                     best_move = move
@@ -220,8 +227,6 @@ class GameGUI:
 
     def update_status(self):
         self.status_label.config(text=f"Skaitlis: {self.game.now_number} | Spēlētāja punkti: {self.game.player_points} | AI punkti: {self.game.ai_points}")
-        
-        # Pārbaudīt, vai spēle beidzas
         if self.game.now_number <= 10 or not any(self.game.now_number % move == 0 for move in [2, 3, 4]):
             self.show_game_end_screen()
 
@@ -234,7 +239,8 @@ class GameGUI:
         self.root.destroy()
         main()
 
-# Palaist spēli
+# === Spēles palaišana ===
+# https://docs.python.org/3/library/tkinter.html
 def main():
     app = ttk.Window()
     app.geometry("400x400")
