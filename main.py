@@ -7,7 +7,7 @@ LEFT_BOUND = 20_000
 RIGHT_BOUND = 30_000
 MAXIMUM_STARTING_NUMBERS = 5
 VALID_DIVISORS = [2, 3, 4]
-ENDING_NUMBER = 10
+ENDING_NUMBER = 4
 
 
 class GameTreeNode:
@@ -258,7 +258,10 @@ class GameGUI:
         self.create_game_screen()
         self.update_status()
         if not self.player_turn:
+            self.update_player_status("AI")
             self.ai_move()
+        else:
+            self.update_player_status("Spēlētājs")
 
     def create_game_screen(self):
         self.game_frame = ttk.Frame(self.root)
@@ -280,18 +283,20 @@ class GameGUI:
             button.grid(row=1, column=i)
             self.move_buttons.append(button)
 
+
     def player_move(self, divisor: int):
         if self.game.move(divisor, True):
             self.player_turn = False
             self.update_status()
             if self.game.now_number > ENDING_NUMBER:
-                self.ai_move()
-                self.update_status()
-                time.sleep(2)  # Simulē spēlētāja gājiena laiku
+                self.root.after(1500, self.ai_move)
+            else:
+                self.show_game_end_screen()
         else:
             messagebox.showerror("Kļūda", f"Nevar dalīt šo skaitli ar {divisor}")
 
     def ai_move(self):
+        self.update_player_status("AI")
         best_move = None
         best_value = float("-inf")
         start_time = time.time()
@@ -319,20 +324,28 @@ class GameGUI:
 
         if best_move:
             self.game.move(best_move, False)
-            time.sleep(2)
-            self.player_turn = True
             self.update_status()
 
+            if self.game.now_number > ENDING_NUMBER:
+                self.root.after(1500, self.enable_player_turn)
+            else:
+                self.show_game_end_screen()
+
+    def enable_player_turn(self):
+        self.update_player_status("Spēlētājs")
+        self.player_turn = True
+        self.update_status()
 
     def update_status(self):
         self.status_label.config(
             text=f"Skaitlis: {self.game.now_number} | Spēlētāja punkti: {self.game.player_points} | AI punkti: {self.game.ai_points}"
         )
 
-        if self.game.now_number <= ENDING_NUMBER or not any(
-            self.game.now_number % move == 0 for move in VALID_DIVISORS
-        ):
-            self.show_game_end_screen()
+
+    def update_player_status(self, move):
+        self.turn_label.config(
+            text=f"Gājiena kārta: {move}"
+        )
 
 
     def show_game_end_screen(self):
