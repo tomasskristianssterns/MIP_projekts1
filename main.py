@@ -184,8 +184,9 @@ class GameGUI:
             root, text="Izvēlieties sākotnējo skaitli un algoritmu"
         )
         self.status_label.pack(padx=10, pady=10)
-
         self.create_selection_screen()
+        self.history_list = []
+        self.history_tree = None
 
     def create_selection_screen(self):
         self.selection_frame = ttk.Frame(self.root)
@@ -286,6 +287,14 @@ class GameGUI:
 
     def player_move(self, divisor: int):
         if self.game.move(divisor, True):
+            new_node = GameTreeNode(self.game.now_number)  # Создаём новый узел
+            if self.history_tree is None:
+                self.history_tree = new_node
+            else:
+                self.history_tree.children.append(new_node)
+
+            self.history_list.append(f"Spēlētājs: {self.game.now_number} (/{divisor})")
+
             self.player_turn = False
             self.update_status()
             if self.game.now_number > ENDING_NUMBER:
@@ -326,6 +335,12 @@ class GameGUI:
             self.game.move(best_move, False)
             self.update_status()
 
+            new_node = GameTreeNode(self.game.now_number)
+            if self.history_tree:
+                self.history_tree.children.append(new_node)
+
+            self.history_list.append(f"AI: {self.game.now_number} (/{best_move})")
+
             if self.game.now_number > ENDING_NUMBER:
                 self.root.after(1500, self.enable_player_turn)
             else:
@@ -360,7 +375,61 @@ class GameGUI:
             "Spēle beigusies",
             f"{winner}\n\nSpēlētāja punkti: {self.game.player_points}\nAI punkti: {self.game.ai_points}",
         )
+        restart_button = ttk.Button(
+            self.game_frame, text="Jauna spēle", command=self.restart_game
+        )
+        restart_button.grid(row=4, column=0)
 
+        history_button = ttk.Button(
+            self.game_frame, text="Vēsture", command=self.show_history_text
+        )
+        history_button.grid(row=4, column=1)
+
+        tree_button = ttk.Button(
+            self.game_frame, text="Paradīt koku", command=self.show_tree
+        )
+        tree_button.grid(row=4, column=2)
+
+    def restart_game(self):
+        self.game_frame.destroy()
+        main()
+
+    def show_history_text(self):
+        history_window = ttk.Toplevel(self.root)
+        history_window.title("Spēles vēsture")
+
+        history_text = "\n".join(self.history_list)
+        history_label = ttk.Label(history_window, text=history_text, justify="left")
+        history_label.pack(padx=10, pady=10)
+
+        close_button = ttk.Button(history_window, text="Close", command=history_window.destroy)
+        close_button.pack(pady=5)
+
+    def display_tree(self, node, depth=0):
+        """
+        Rekursīvi rada spēles koku
+        """
+        if node is None:
+            return ""
+
+        result = "  " * depth + f"→ {node.number}\n"
+
+        for child in node.children:
+            result += self.display_tree(child, depth + 1)
+
+        return result
+
+    def show_tree(self):
+        tree_window = ttk.Toplevel(self.root)
+        tree_window.title("Spēles koks")
+
+        tree_text = self.display_tree(self.history_tree)
+
+        tree_label = ttk.Label(tree_window, text=tree_text, justify="left")
+        tree_label.pack(padx=10, pady=10)
+
+        close_button = ttk.Button(tree_window, text="Close", command=tree_window.destroy)
+        close_button.pack(pady=5)
 
 def main():
     """
