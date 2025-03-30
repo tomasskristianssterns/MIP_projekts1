@@ -8,6 +8,8 @@ RIGHT_BOUND = 30_000
 MAXIMUM_STARTING_NUMBERS = 5
 VALID_DIVISORS = [2, 3, 4]
 ENDING_NUMBER = 10
+VISITED_NODES = 0
+COMPUTER_MOVE_TIMES = []
 
 
 class GameTreeNode:
@@ -76,8 +78,6 @@ class Game:
         self.now_number = number
         self.player_points = 0
         self.ai_points = 0
-        self.visited_nodes = 0
-        self.start_time = time.time()
 
     def move(self, divisor: int, is_human: bool) -> bool:
         """
@@ -112,7 +112,8 @@ class Game:
         Minimax algoritms (bez griešanas)
         https://www.geeksforgeeks.org/minimax-algorithm-in-game-theory-set-2-implementation/
         """
-        self.visited_nodes += 1
+        global VISITED_NODES
+        VISITED_NODES += 1
         if self.now_number <= ENDING_NUMBER or depth == 0:
             return self.heuristic()
 
@@ -134,8 +135,8 @@ class Game:
         Alfa-beta griešana — optimizēts minimax
         https://www.geeksforgeeks.org/practical-implementation-of-alpha-beta-pruning/
         """
-
-        self.visited_nodes += 1
+        global VISITED_NODES
+        VISITED_NODES += 1
         if self.now_number <= ENDING_NUMBER or depth == 0:
             return self.heuristic()
 
@@ -184,8 +185,9 @@ class GameGUI:
             root, text="Izvēlieties sākotnējo skaitli un algoritmu"
         )
         self.status_label.pack(padx=10, pady=10)
-
         self.create_selection_screen()
+        self.history_list = []
+        self.history_tree = None
 
     def create_selection_screen(self):
         self.selection_frame = ttk.Frame(self.root)
@@ -218,19 +220,35 @@ class GameGUI:
         self.algorithm_option.grid(row=2, column=1, padx=5, pady=5)
         self.algorithm_option.set("Minimax")
 
+        self.first_player_label = ttk.Label(
+            self.selection_frame, text="Izvēlieties kurš sāk:"
+        )
+        self.first_player_label.grid(row=3, column=0, padx=5, pady=5)
+
+        self.player_option = ttk.Combobox(
+            self.selection_frame, values=["Spēlētājs", "Dators"]
+        )
+        self.player_option.grid(row=3, column=1, padx=5, pady=5)
+        self.player_option.set("Spēlētājs")
+
         self.start_button = ttk.Button(
             self.selection_frame,
             text="Sākt spēli",
             command=self.start_game_from_selection,
         )
-        self.start_button.grid(row=3, column=0, columnspan=2, pady=10)
+        self.start_button.grid(row=4, column=0, columnspan=2, pady=10)
 
     def start_game_from_selection(self):
         number = int(self.start_number_option.get())
         algorithm = self.algorithm_option.get()
+        player = self.set_player(self.player_option.get())
         self.set_algorithm(algorithm)
         self.selection_frame.destroy()
-        self.start_game(number, player_starts=True)
+        self.start_game(number, player_starts=player)
+
+    def set_player(self, player):
+        self.player = player == "Spēlētājs"
+        return self.player
 
     def set_algorithm(self, algo):
         self.algorithm = algo
@@ -242,7 +260,10 @@ class GameGUI:
         self.create_game_screen()
         self.update_status()
         if not self.player_turn:
+            self.update_player_status("AI")
             self.ai_move()
+        else:
+            self.update_player_status("Spēlētājs")
 
     def create_game_screen(self):
         self.game_frame = ttk.Frame(self.root)
@@ -250,6 +271,9 @@ class GameGUI:
 
         self.status_label = ttk.Label(self.game_frame, text="Spēles sākums")
         self.status_label.grid(row=0, column=0, columnspan=3)
+
+        self.turn_label = ttk.Label(self.game_frame, text="Gājiena kārta:")
+        self.turn_label.grid(row=2, column=0, columnspan=3, pady=10)
 
         self.move_buttons = []
         for i, move in enumerate(VALID_DIVISORS):
@@ -263,19 +287,28 @@ class GameGUI:
 
     def player_move(self, divisor: int):
         if self.game.move(divisor, True):
+            new_node = GameTreeNode(self.game.now_number)  # Create a new node
+            if self.history_tree is None:
+                self.history_tree = new_node
+            else:
+                self.history_tree.children.append(new_node)
+
+            self.history_list.append(f"Spēlētājs: {self.game.now_number} (/{divisor})")
+
             self.player_turn = False
             self.update_status()
             if self.game.now_number > ENDING_NUMBER:
-                self.ai_move()
-                self.update_status()
-                time.sleep(2)  # Simulē spēlētāja gājiena laiku
+                self.root.after(1500, self.ai_move)
+            else:
+                self.show_game_end_screen()
         else:
             messagebox.showerror("Kļūda", f"Nevar dalīt šo skaitli ar {divisor}")
 
     def ai_move(self):
+        self.update_player_status("AI")
         best_move = None
         best_value = float("-inf")
-        start_time = time.time()
+        start_time = time.perf_counter_ns()
 
         for move in VALID_DIVISORS:
             if self.game.now_number % move == 0:
@@ -293,25 +326,41 @@ class GameGUI:
                     best_value = eval
                     best_move = move
 
-        end_time = time.time()
+        end_time = time.perf_counter_ns()
         print(
-            f"AI izvēlējās {best_move}, aprēķina laiks: {end_time - start_time:.4f} sekundes"
+            f"AI izvēlējās {best_move}, aprēķina laiks: {(end_time - start_time)/1_000:.4f} milisekundes"
         )
+
+        global COMPUTER_MOVE_TIMES
+        COMPUTER_MOVE_TIMES.append(end_time - start_time)
 
         if best_move:
             self.game.move(best_move, False)
-            time.sleep(2)
-            self.player_turn = True
             self.update_status()
+
+            new_node = GameTreeNode(self.game.now_number)
+            if self.history_tree:
+                self.history_tree.children.append(new_node)
+
+            self.history_list.append(f"AI: {self.game.now_number} (/{best_move})")
+
+            if self.game.now_number > ENDING_NUMBER:
+                self.root.after(1500, self.enable_player_turn)
+            else:
+                self.show_game_end_screen()
+
+    def enable_player_turn(self):
+        self.update_player_status("Spēlētājs")
+        self.player_turn = True
+        self.update_status()
 
     def update_status(self):
         self.status_label.config(
             text=f"Skaitlis: {self.game.now_number} | Spēlētāja punkti: {self.game.player_points} | AI punkti: {self.game.ai_points}"
         )
-        if self.game.now_number <= ENDING_NUMBER or not any(
-            self.game.now_number % move == 0 for move in VALID_DIVISORS
-        ):
-            self.show_game_end_screen()
+
+    def update_player_status(self, move):
+        self.turn_label.config(text=f"Gājiena kārta: {move}")
 
     def show_game_end_screen(self):
         if self.game.player_points == self.game.ai_points:
@@ -321,10 +370,81 @@ class GameGUI:
         else:
             winner = "AI uzvarēja!"
 
+        global VISITED_NODES, COMPUTER_MOVE_TIMES
+        average_time = (
+            sum(COMPUTER_MOVE_TIMES) / len(COMPUTER_MOVE_TIMES)
+            if COMPUTER_MOVE_TIMES
+            else 0
+        )
+
+        average_time /= 1_000  # milisekundes
+
         messagebox.showinfo(
             "Spēle beigusies",
-            f"{winner}\n\nSpēlētāja punkti: {self.game.player_points}\nAI punkti: {self.game.ai_points}",
+            f"{winner}\n\nSpēlētāja punkti: {self.game.player_points}\nAI punkti: {self.game.ai_points}\nDators apmeklēja {VISITED_NODES} virsotnes\nVidējais datora gājiena laiks: {average_time:.2f} milisekundes\n\n",
         )
+        restart_button = ttk.Button(
+            self.game_frame, text="Jauna spēle", command=self.restart_game
+        )
+        restart_button.grid(row=4, column=0)
+
+        history_button = ttk.Button(
+            self.game_frame, text="Vēsture", command=self.show_history_text
+        )
+        history_button.grid(row=4, column=1)
+
+        tree_button = ttk.Button(
+            self.game_frame, text="Paradīt koku", command=self.show_tree
+        )
+        tree_button.grid(row=4, column=2)
+
+    def restart_game(self):
+        global VISITED_NODES, COMPUTER_MOVE_TIMES
+        VISITED_NODES = 0
+        COMPUTER_MOVE_TIMES = []
+        self.game_frame.destroy()
+        main()
+
+    def show_history_text(self):
+        history_window = ttk.Toplevel(self.root)
+        history_window.title("Spēles vēsture")
+
+        history_text = "\n".join(self.history_list)
+        history_label = ttk.Label(history_window, text=history_text, justify="left")
+        history_label.pack(padx=10, pady=10)
+
+        close_button = ttk.Button(
+            history_window, text="Close", command=history_window.destroy
+        )
+        close_button.pack(pady=5)
+
+    def display_tree(self, node, depth=0):
+        """
+        Rekursīvi rada spēles koku
+        """
+        if node is None:
+            return ""
+
+        result = "  " * depth + f"→ {node.number}\n"
+
+        for child in node.children:
+            result += self.display_tree(child, depth + 1)
+
+        return result
+
+    def show_tree(self):
+        tree_window = ttk.Toplevel(self.root)
+        tree_window.title("Spēles koks")
+
+        tree_text = self.display_tree(self.history_tree)
+
+        tree_label = ttk.Label(tree_window, text=tree_text, justify="left")
+        tree_label.pack(padx=10, pady=10)
+
+        close_button = ttk.Button(
+            tree_window, text="Close", command=tree_window.destroy
+        )
+        close_button.pack(pady=5)
 
 
 def main():
